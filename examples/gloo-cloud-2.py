@@ -91,113 +91,121 @@ void main()
     }
 }
 """
+def visualize(pos=None, radius=None, colors=None, fg_color=(0,0,0,1),):
+    """
+    pos: (frames, particles, position dimensions)
+    radius: (particles, size) OR (frames, particles, size)
+    colors: (particles, G / RGB / RGBA) OR (frames, particles, G / RGB / RGBA)
+    """
+    global current_frame, num_frames
 
-theta, phi = 0,0
-window = app.Window(width=1920, height=1080, color=(1,1,1,1))
-
-
-n = 1<<8
-program = gloo.Program(vertex, fragment, count=n)
-view = np.eye(4, dtype=np.float32)
-glm.translate(view, 0, 0, -5)
-
-program['position'] = 0.35 * np.random.randn(n,3)
-program['radius']   = np.random.uniform(10,50,n)
-program['fg_color'] = 0,0,0,1
-colors = np.random.uniform(0.75, 1.00, (n, 4))
-colors[:,3] = 1
-program['bg_color'] = colors
-program['linewidth'] = 0.0
-program['antialias'] = 0.0
+    assert isinstance(pos, np.ndarray)
+    assert len(pos.shape) == 3
 
 
-# create an instance of the TrackballPan object.
-trackball = TrackballPan(Position("position"), znear=3, zfar=10, distance=5)
-program['transform'] = trackball
+    num_frames = pos.shape[0]
+    current_frame = 0
 
-trackball.aspect = 1
-# rotation around the X axis
-trackball.phi = 0
-# rotation around the Y axis
-trackball.theta = 0
-trackball.zoom = 50
+    num_particles = pos.shape[1]
+    pos_num_dims = pos.shape[2]
 
+    if radius is None:
+        radius = 10 * np.ones(num_particles)
 
-@window.event
-def on_draw(dt):
-    window.clear()
-    program.draw(gl.GL_POINTS)
+    if colors is None:
+        colors = np.random.random((num_particles, 4))
+        colors[:, 3] = 1
 
-@window.event
-def on_key_press(symbol, modifiers):
-    pass
-    # if (symbol == app.window.key.RIGHT):
-    #     trackball.view_x += 0.1
-    # elif (symbol ==  app.window.key.LEFT):
-    #     trackball.view_x -= 0.1
-    # elif (symbol == app.window.key.UP):
-    #     trackball.view_y += 0.1
-    # elif (symbol == app.window.key.DOWN):
-    #     trackball.view_y -= 0.1
+    # if len(radius.shape) == 1:
+    #     radius = radius.reshape(-1, 1)
+    radius_num_dims = len(radius.shape)
 
 
-# @window.event
-# def on_mouse_scroll(mouse_x, mouse_y, scroll_dx, scroll_dy):
-#     view = np.array(program['view']).reshape(4,4)
-#     glm.translate(view, 0, 0, scroll_dy)
-#     program['view'] = view
+    if len(colors.shape) == 1: # if Greyscale + does not change from frame to frame
+        colors = colors.reshape(-1, 1)
+    colors_num_dims = len(colors.shape)
+    colors_num_channels = colors.shape[-1]
+    colors_num_channels_fill = 3 if colors_num_channels != 4 else colors_num_channels
 
-    # old_zoom_size = zoom_size
-    # zoom_size += 0.01 * scroll_dy
-    # V["radius"] *= zoom_size / old_zoom_size
+    assert 1 <= pos_num_dims <= 3
+    assert 1 <= radius_num_dims < 3
+    assert 2 <= colors_num_dims <= 3
+    assert colors_num_channels in [1,3,4]
 
-    # draw_offset += -0.01 * scroll_dx
+    window = app.Window(width=1920, height=1080, color=(1,1,1,1), vsync=True)
 
 
-@window.event
-def on_character(character):
-    if (character in '+='):
-        program['radius'] += 0.5
-    elif (character in "-_"):
-        program['radius']  -= 0.5
-    # if (character in "wW"):
-    #     trackball.distance += 0.1
-    # elif (character in "sS"):
-        # trackball.distance -= 0.1
-    # elif (character in "wW"):
-    #     trackball.view_y += 0.1
-    # elif (character in "sS"):
-    #     trackball.view_y -= 0.1
-    # elif (character in " eE"):
-    #     trackball.zoom += 1
-    # elif (character in "qQ"):
-    #     trackball.zoom -= 1
+    program = gloo.Program(vertex, fragment, count=num_particles)
+    view = np.eye(4, dtype=np.float32)
+    glm.translate(view, 0, 0, -5)
 
-    # view = np.array(program['view']).reshape(4,4)
-    # glm.translate(view, *amount_to_translate)
-    # program['view'] = view
-    
+    program['fg_color'] = 0,0,0,1
+    program['linewidth'] = 0.0
+    program['antialias'] = 0.0
 
-    # global stepsize, frame_idx, draw_offset
-    # if (character == "r"):
-    #     frame_idx = 0
-    #     stepsize = 0
-    # elif (character in ".>"):
-    #     frame_idx += 1
-    # elif (character in ",<"):
-    #     frame_idx -= 1
-    # elif (character == "R"):
-    #     draw_offset = 0
-    # elif (character in  ["+", "="] ):
-    #     V["radius"] *= 1.1
-    # elif (character in ["-", "_"]):
-    #     V["radius"] *= 1/1.1
-    # elif (character in "dD"):
-    #     draw_offset += 0.1
-    # elif (character in "aA"):
-    #     draw_offset -= 0.1
+    program['position'] = np.zeros((num_particles, 3))
+    # program['radius']   = np.zeros(num_particles)
+    program['bg_color'] = np.ones((num_particles, 4))
 
-window.attach(program["transform"])
+    program['position'][:, :pos_num_dims] = pos[current_frame] # load first frame
+    program['radius'] = radius if radius_num_dims == 1 else radius[current_frame]
 
-gl.glEnable(gl.GL_DEPTH_TEST)
-app.run()
+    color_frame = colors if colors_num_dims == 2 else colors[current_frame]
+    program['bg_color'][:, :colors_num_channels_fill] = color_frame
+
+
+    # create an instance of the TrackballPan object.
+    trackball = TrackballPan(Position("position"), znear=3, zfar=10, distance=5)
+    program['transform'] = trackball
+
+    trackball.aspect = 1
+    # rotation around the X axis
+    trackball.phi = 0
+    # rotation around the Y axis
+    trackball.theta = 0
+    trackball.zoom = 50
+
+
+    @window.event
+    def on_draw(dt):
+        global current_frame, num_frames
+        current_frame += 1
+        current_frame %= num_frames
+        program['position'][:, :pos_num_dims] = pos[current_frame] # load first frame
+
+        if radius_num_dims == 2:
+            program['radius'] = radius[current_frame]
+
+        if colors_num_dims == 3:
+            program['bg_color'][:, :colors_num_channels_fill] = colors[current_frame]
+
+        window.clear()
+        program.draw(gl.GL_POINTS)
+
+    @window.event
+    def on_key_press(symbol, modifiers):
+        pass
+        # if (symbol == app.window.key.RIGHT):
+
+    @window.event
+    def on_character(character):
+        if (character in '+='):
+            program['radius'] += 0.5
+        elif (character in "-_"):
+            program['radius']  -= 0.5
+
+
+    window.attach(program["transform"])
+
+    gl.glEnable(gl.GL_DEPTH_TEST)
+    app.run(framecount=60*10)
+
+if __name__ == "__main__":
+    pos = (np.random.random((100, 1<<10, 1)) - 0.5)
+    pos[1:] *= 0.01
+    pos = np.cumsum(pos, axis=0)
+    visualize(pos = pos)
+    pos = (np.random.random((100, 1<<15, 2)) - 0.5)
+    pos[1:] *= 0.01
+    pos = np.cumsum(pos, axis=0)
+    visualize(pos = pos)
