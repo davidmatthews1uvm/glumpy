@@ -62,7 +62,7 @@ void main()
 
     vec2 p = (gl_PointCoord.xy - vec2(0.5, 0.5)) * 2;
     float len_p = length(p);
-    // gl_FragDepth = 0.5 * v_z  + 0.5* (len_p);
+    gl_FragDepth = 0.5 * v_z  + 0.5* (len_p)*v_radius / 64.0;
     vec3 normal = normalize(vec3(p.xy, 1.0 - len_p));
     vec3 direction = normalize(vec3(1.0, 1.0, 1.0));
     float diffuse = max(0.0, dot(direction, normal));
@@ -93,16 +93,16 @@ void main()
 """
 
 theta, phi = 0,0
-window = app.Window(width=800, height=800, color=(1,1,1,1))
+window = app.Window(width=1920, height=1080, color=(1,1,1,1))
 
 
-n = 100
+n = 1<<8
 program = gloo.Program(vertex, fragment, count=n)
 view = np.eye(4, dtype=np.float32)
 glm.translate(view, 0, 0, -5)
 
 program['position'] = 0.35 * np.random.randn(n,3)
-program['radius']   = 5 * np.ones(n) #np.random.uniform(5,10,n)
+program['radius']   = np.random.uniform(10,50,n)
 program['fg_color'] = 0,0,0,1
 colors = np.random.uniform(0.75, 1.00, (n, 4))
 colors[:,3] = 1
@@ -160,10 +160,10 @@ def on_character(character):
         program['radius'] += 0.5
     elif (character in "-_"):
         program['radius']  -= 0.5
-    # if (character in "dD"):
-    #     trackball.view_x += 0.1
-    # elif (character in "aA"):
-    #     trackball.view_x -= 0.1
+    # if (character in "wW"):
+    #     trackball.distance += 0.1
+    # elif (character in "sS"):
+        # trackball.distance -= 0.1
     # elif (character in "wW"):
     #     trackball.view_y += 0.1
     # elif (character in "sS"):
